@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 
@@ -69,3 +71,9 @@ const redisMonitor = (name: string) =>
     }, { dependsOn: [kps] });
 redisMonitor("redis-leader");
 redisMonitor("redis-replica");
+
+// Basic Grafana dashboard, loaded automatically by the Grafana sidecar (label grafana_dashboard)
+new k8s.core.v1.ConfigMap("guestbook-dashboard", {
+    metadata: { name: "guestbook-dashboard", namespace: "monitoring", labels: { grafana_dashboard: "1" } },
+    data: { "guestbook.json": fs.readFileSync(path.join(__dirname, "dashboards", "guestbook-dashboard.json"), "utf8") },
+}, { dependsOn: [kps] });
