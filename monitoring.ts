@@ -54,3 +54,18 @@ export const grafanaUrl = `http://${grafanaHost}:${grafanaPort}`;
 export const grafanaAdminUser = "admin";
 export const grafanaAdminPassword = adminPassword;   // stays a Pulumi secret
 export const prometheusUrl = "http://localhost:9090";
+
+// Tell Prometheus to scrape the Redis exporters (Service chosen by label, port chosen by name)
+const redisMonitor = (name: string) =>
+    new k8s.apiextensions.CustomResource(`${name}-sm`, {
+        apiVersion: "monitoring.coreos.com/v1",
+        kind: "ServiceMonitor",
+        metadata: { name, namespace: "monitoring" },
+        spec: {
+            selector: { matchLabels: { app: name } },
+            namespaceSelector: { matchNames: ["default"] },
+            endpoints: [{ port: "metrics", interval: "15s" }],
+        },
+    }, { dependsOn: [kps] });
+redisMonitor("redis-leader");
+redisMonitor("redis-replica");

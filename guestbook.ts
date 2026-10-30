@@ -5,6 +5,15 @@ import * as pulumi from "@pulumi/pulumi";
 const config = new pulumi.Config();
 const isMinikube = config.getBoolean("isMinikube");
 
+// Sidecar that translates Redis stats into Prometheus format (port 9121)
+const redisExporter: k8s.types.input.core.v1.Container = {
+    name: "redis-exporter",
+    image: "oliver006/redis_exporter:v1.67.0",
+    ports: [{ name: "metrics", containerPort: 9121 }],
+    env: [{ name: "REDIS_ADDR", value: "redis://localhost:6379" }],
+    resources: { requests: { cpu: "25m", memory: "32Mi" }, limits: { memory: "64Mi" } },
+};
+
 // ---------- Redis leader (writes) ----------
 const redisLeaderLabels = { app: "redis-leader" };
 const redisLeaderDeployment = new k8s.apps.v1.Deployment("redis-leader", {
@@ -19,7 +28,7 @@ const redisLeaderDeployment = new k8s.apps.v1.Deployment("redis-leader", {
                     image: "redis:7.2",
                     resources: { requests: { cpu: "100m", memory: "100Mi" } },
                     ports: [{ containerPort: 6379 }],
-                }],
+                }, redisExporter],
             },
         },
     },
@@ -27,7 +36,10 @@ const redisLeaderDeployment = new k8s.apps.v1.Deployment("redis-leader", {
 const redisLeaderService = new k8s.core.v1.Service("redis-leader", {
     metadata: { name: "redis-leader", labels: redisLeaderLabels },
     spec: {
-        ports: [{ port: 6379, targetPort: 6379 }],
+        ports: [
+            { name: "redis", port: 6379, targetPort: 6379 },
+            { name: "metrics", port: 9121, targetPort: 9121 },
+        ],
         selector: redisLeaderLabels,
     },
 });
@@ -47,7 +59,7 @@ const redisReplicaDeployment = new k8s.apps.v1.Deployment("redis-replica", {
                     command: ["redis-server", "--replicaof", "redis-leader", "6379"],
                     resources: { requests: { cpu: "100m", memory: "100Mi" } },
                     ports: [{ containerPort: 6379 }],
-                }],
+                }, redisExporter],
             },
         },
     },
@@ -55,7 +67,10 @@ const redisReplicaDeployment = new k8s.apps.v1.Deployment("redis-replica", {
 const redisReplicaService = new k8s.core.v1.Service("redis-replica", {
     metadata: { name: "redis-replica", labels: redisReplicaLabels },
     spec: {
-        ports: [{ port: 6379, targetPort: 6379 }],
+        ports: [
+            { name: "redis", port: 6379, targetPort: 6379 },
+            { name: "metrics", port: 9121, targetPort: 9121 },
+        ],
         selector: redisReplicaLabels,
     },
 });
