@@ -37,7 +37,7 @@ pulumi stack init dev
 pulumi config set isMinikube true     # kind has no cloud LoadBalancer, so the frontend uses ClusterIP
 pulumi config set grafanaHost localhost
 pulumi config set grafanaPort 3000
-pulumi config set --secret grafanaAdminPassword 'Demo-Grafana-2026'
+pulumi config set --secret grafanaAdminPassword    # prompts for a password of your choice (input hidden)
 pulumi up
 ```
 The first `pulumi up` is slow on a small machine (about 16 minutes on my 2-CPU laptop) because many images are pulled.
@@ -46,7 +46,7 @@ The first `pulumi up` is slow on a small machine (about 16 minutes on my 2-CPU l
 ## Access
 | Service | URL | Username | Password |
 |---|---|---|---|
-| Grafana | http://localhost:3000 | `admin` | `Demo-Grafana-2026` (throwaway, local demo cluster only) |
+| Grafana | http://localhost:3000 | `admin` | the password you entered at the `pulumi config set --secret` prompt |
 | Prometheus | http://localhost:9090 | none | none |
 
 `pulumi stack output` prints the URLs and username. Reveal the password with

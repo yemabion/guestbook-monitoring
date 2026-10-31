@@ -1,3 +1,15 @@
 /bin/
 /node_modules/
 Pulumi.dev.yaml
+
+# Stack config, env files, keys and kubeconfigs must never be committed
+Pulumi.*.yaml
+!Pulumi.*.yaml.example
+.env
+.env.*
+*.pem
+*.key
+kubeconfig*
+*.kubeconfig
+.pulumi/
+*.log

@@ -14,6 +14,19 @@ const redisExporter: k8s.types.input.core.v1.Container = {
     resources: { requests: { cpu: "25m", memory: "32Mi" }, limits: { memory: "64Mi" } },
 };
 
+// Shared container settings: memory limits (no CPU limit, to avoid throttling) and generous probes,
+// because slow machines make tight probes fail and restart healthy pods.
+const redisRuntime: Partial<k8s.types.input.core.v1.Container> = {
+    resources: { requests: { cpu: "100m", memory: "100Mi" }, limits: { memory: "256Mi" } },
+    readinessProbe: { exec: { command: ["redis-cli", "ping"] }, initialDelaySeconds: 5, periodSeconds: 10, timeoutSeconds: 5 },
+    livenessProbe: { exec: { command: ["redis-cli", "ping"] }, initialDelaySeconds: 15, periodSeconds: 20, timeoutSeconds: 5, failureThreshold: 6 },
+};
+const frontendRuntime: Partial<k8s.types.input.core.v1.Container> = {
+    resources: { requests: { cpu: "100m", memory: "100Mi" }, limits: { memory: "256Mi" } },
+    readinessProbe: { httpGet: { path: "/", port: 80 }, initialDelaySeconds: 5, periodSeconds: 10, timeoutSeconds: 5 },
+    livenessProbe: { tcpSocket: { port: 80 }, initialDelaySeconds: 15, periodSeconds: 20, timeoutSeconds: 5, failureThreshold: 6 },
+};
+
 // ---------- Redis leader (writes) ----------
 const redisLeaderLabels = { app: "redis-leader" };
 const redisLeaderDeployment = new k8s.apps.v1.Deployment("redis-leader", {
@@ -26,7 +39,7 @@ const redisLeaderDeployment = new k8s.apps.v1.Deployment("redis-leader", {
                 containers: [{
                     name: "redis-leader",
                     image: "redis:7.2",
-                    resources: { requests: { cpu: "100m", memory: "100Mi" } },
+                    ...redisRuntime,
                     ports: [{ containerPort: 6379 }],
                 }, redisExporter],
             },
@@ -57,7 +70,7 @@ const redisReplicaDeployment = new k8s.apps.v1.Deployment("redis-replica", {
                     name: "replica",
                     image: "redis:7.2",
                     command: ["redis-server", "--replicaof", "redis-leader", "6379"],
-                    resources: { requests: { cpu: "100m", memory: "100Mi" } },
+                    ...redisRuntime,
                     ports: [{ containerPort: 6379 }],
                 }, redisExporter],
             },
@@ -87,8 +100,8 @@ const frontendDeployment = new k8s.apps.v1.Deployment("frontend", {
             spec: {
                 containers: [{
                     name: "frontend",
-                    image: "pulumi/guestbook-php-redis",
-                    resources: { requests: { cpu: "100m", memory: "100Mi" } },
+                    image: "pulumi/guestbook-php-redis@sha256:f21cbff35c0bad29d0c480f741e19919fb135d7c7941b8b5fc7240503d0a1c4f",
+                    ...frontendRuntime,
                     env: [{ name: "GET_HOSTS_FROM", value: "dns" }],
                     ports: [{ containerPort: 80 }],
                 }],
