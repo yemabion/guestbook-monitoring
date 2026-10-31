@@ -16,7 +16,7 @@ The Guestbook app itself comes from Pulumi's public example; see that repository
 |---|---|
 | Deploy Prometheus and Grafana with Pulumi | Helm release in `monitoring.ts` (Pulumi `helm.v3.Release`) |
 | Prometheus scrapes frontend and backend | Backend: `ServiceMonitor`s for the Redis exporters. Frontend: pod CPU/memory from the kubelet (cAdvisor) target that the stack scrapes |
-| Simple metrics (requests / resource usage) | Redis commands per second, Redis memory/clients, frontend CPU and memory per pod |
+| Simple metrics (requests / resource usage) | Guestbook writes (leader) and reads (replica) per second, Redis memory/clients, frontend CPU and memory per pod |
 | Expose Grafana (LoadBalancer or NodePort) | NodePort 30300, mapped to localhost:3000 by `kind-config.yaml` |
 | Output Grafana URL and credentials | Pulumi stack outputs `grafanaUrl`, `grafanaAdminUser`, `grafanaAdminPassword` (secret) |
 | Stretch: dashboard | `dashboards/guestbook-dashboard.json`, provisioned as a ConfigMap |
@@ -58,7 +58,7 @@ To open the Guestbook itself: `kubectl port-forward svc/frontend 8081:80`, then 
    `serviceMonitor/monitoring/redis-replica/0`, each **1 / 1 up**.
 2. In the Query tab, run:
    - `redis_up` returns 2 series with value 1
-   - `rate(redis_commands_processed_total[1m])` returns request activity per Redis
+   - `rate(redis_commands_total{cmd=~"set|get"}[1m])` returns the app's writes (`set` on the leader) and reads (`get` on the replica); the replica's `set` is the same writes arriving by replication
    - `container_memory_working_set_bytes{namespace="default", pod=~"frontend.*", container="frontend"}` returns 3 series (one per frontend pod)
 3. Generate traffic: port-forward the frontend (above) and add entries; the command rate rises.
 4. CLI check: `kubectl get servicemonitor -n monitoring | grep redis` and `kubectl get endpoints redis-leader` (port 9121 listed).
@@ -80,6 +80,7 @@ To open the Guestbook itself: `kubectl port-forward svc/frontend 8081:80`, then 
 - **Exporter sidecars:** Redis does not expose Prometheus metrics itself. `redis_exporter` runs beside each Redis container (shared network, `localhost:6379`) and exposes them on port 9121.
 - **NodePort plus kind port mapping:** simplest option for a local cluster; the mapping must exist when the cluster is created.
 - **Secrets and config:** the Grafana password is a Pulumi secret config value, never in code. `Pulumi.dev.yaml` is git-ignored; `Pulumi.dev.yaml.example` shows the shape.
+- **Hardening:** the frontend image is pinned by digest; all Guestbook containers have memory limits and readiness/liveness probes with generous timeouts (no CPU limits, to avoid throttling; default-timeout probes restarted several monitoring pods on my slow machine).
 - **Explicit names and labels, pinned versions:** the upstream example relied on auto-generated names and unpinned images; explicit labels are what the ServiceMonitors select on.
 
 ## Issues found along the way
@@ -91,7 +92,7 @@ To open the Guestbook itself: `kubectl port-forward svc/frontend 8081:80`, then 
 - The stock frontend exposes no Prometheus metrics, so there is **no true HTTP request rate or error rate**. Frontend health is shown through resource usage; Redis command rate is a proxy for application activity, not the same thing.
 - No persistence: Redis data is lost when its pods restart; Prometheus keeps 12 hours of data on ephemeral storage.
 - No alerting, TLS or SSO; Grafana uses a documented demo password. Single-node kind cluster, no high availability.
-- The frontend image (`pulumi/guestbook-php-redis`) is not version-pinned.
+- Redis images are pinned by tag (`redis:7.2`, exporter `v1.67.0`), not by digest, so patch releases of those tags can still change underneath.
 
 ## Next steps
 Instrument the frontend (or add a blackbox probe) for request, latency and error metrics; add alert rules and Alertmanager;
@@ -102,3 +103,6 @@ persistent volumes for Prometheus and Redis; Ingress with TLS and SSO for Grafan
 pulumi destroy
 kind delete cluster --name guestbook
 ```
+## Security notes
+- **Secrets:** no tokens or keys are committed. Gitleaks scanned the full git history (no leaks found). Stack config (`Pulumi.*.yaml`), `.env` files, keys and kubeconfigs are git-ignored.
+- **Dependencies:** `npm audit` reports 20 moderate findings, all within the Pulumi SDK's own dependency tree (`glob`, `minimatch` via `@npmcli/*`). They affect the machine running `pulumi up`, not the cluster, and the only suggested fix (`npm audit fix --force`) downgrades Pulumi to an older release, so I left them as is. Re-check with `npm audit` after upgrading the Pulumi SDK.
