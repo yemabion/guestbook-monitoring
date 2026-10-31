@@ -45,7 +45,7 @@
   {
    "id": 2,
    "type": "timeseries",
-   "title": "Guestbook operations per second (set = writes, get = reads)",
+   "title": "Guestbook operations per second (writes on leader, reads on replica)",
    "gridPos": {
     "x": 6,
     "y": 0,
@@ -59,8 +59,13 @@
    "targets": [
     {
      "refId": "A",
-     "expr": "sum by (service, cmd) (rate(redis_commands_total{cmd=~\"set|get\"}[1m]))",
-     "legendFormat": "{{service}} {{cmd}}"
+     "expr": "sum(rate(redis_commands_total{cmd=\"set\", service=\"redis-leader\"}[1m]))",
+     "legendFormat": "writes (leader set)"
+    },
+    {
+     "refId": "B",
+     "expr": "sum(rate(redis_commands_total{cmd=\"get\", service=\"redis-replica\"}[1m]))",
+     "legendFormat": "reads (replica get)"
     }
    ]
   },
