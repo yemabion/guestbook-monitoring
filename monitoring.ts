@@ -20,7 +20,7 @@ export const kps = new k8s.helm.v3.Release("kube-prometheus-stack", {
     version: "92.14.1",
     namespace: ns.metadata.name,
     repositoryOpts: { repo: "https://prometheus-community.github.io/helm-charts" },
-    timeout: 900,
+    timeout: 1800,
     values: {
         alertmanager: { enabled: false },
         nodeExporter: { enabled: false },
