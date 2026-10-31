@@ -28,7 +28,7 @@ Resources used: 2 CPUs and 8 GB RAM available to Docker. A Pulumi account (free)
 
 ## Deploy
 ```bash
-git clone <REPO-URL> guestbook-monitoring && cd guestbook-monitoring
+git clone https://github.com/yemabion/guestbook-monitoring.git guestbook-monitoring && cd guestbook-monitoring
 kind create cluster --name guestbook --config kind-config.yaml
 kubectl config current-context        # should print: kind-guestbook
 npm ci
